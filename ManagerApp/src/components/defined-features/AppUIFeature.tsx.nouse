@@ -1,0 +1,223 @@
+import { IonAccordion, IonAccordionGroup, IonButton, IonCol, IonContent, IonGrid, IonInput, IonItem, IonLabel, IonList, IonRow, useIonPopover } from "@ionic/react";
+import React, { useEffect, useRef, useState } from "react";
+import { FaEdit, FaTrash} from 'react-icons/fa';
+import * as FaIcons from "react-icons/fa";
+import { IconContext } from "react-icons/lib";
+import { apiRemoveAppFeature, apiUpdateAppFeature, loadDefinedAppFeatures } from "../../dataproviders/dynamic_url.api";
+import { DefinedFeatureEntity } from "./DefinedFeature";
+
+interface AppFeatures{
+    id?:string;
+    name?: string;
+    content: {
+        title?: string;
+        url?: string;
+        iosIcon?: string;
+        mdIcon?:string;
+    }
+}
+
+interface AppFeaturePopoverProp{
+    item: AppFeatures|null|undefined;
+    action: string;
+    onDismis: (data:any, role: string)=>void;
+}
+export const AppFeaturePopover: React.FC<AppFeaturePopoverProp> = ({item,action, onDismis}) => {
+    const [selectItems,setSelectItems] = useState<Array<any>>([]);
+    useEffect(()=>{
+        let icons = FaIcons as any;
+        let iconSelect = [];
+        for (const key in icons) {
+            if (Object.prototype.hasOwnProperty.call(icons, key)) {
+                const element = icons[key];
+                iconSelect.push({value: key, label: (<DynamicFaIcon name={key}/>)})
+            }
+        }
+        setSelectItems(iconSelect);
+    },[]);
+    const [icon,setIcon] = useState<string|null|undefined>('FaInfoCircle');
+    const [name,setName] = useState<string|null|undefined>(item?.name);
+    const [url,setUrl] = useState<string|null|undefined>(item?.content.url);
+    function selectIcon(el: string){
+        setIcon(el);
+        toggleAccordion();
+    }
+    const accordionGroup = useRef<null | HTMLIonAccordionGroupElement>(null);
+    const toggleAccordion = () => {
+        if (!accordionGroup.current) {
+        return;
+        }
+        const nativeEl = accordionGroup.current;
+
+        if (nativeEl.value === 'first') {
+            nativeEl.value = undefined;
+        } else {
+            nativeEl.value = 'first';
+        }
+    };
+    return (
+    <IonContent className="ion-padding">
+        <IonItem>
+            <IonButton onClick={()=>{
+                onDismis(null,"cancel");
+            }} slot="start">cancel</IonButton>
+            <IonButton onClick={()=>{
+                onDismis({name,url,icon,id: item?.id},action);
+            }} slot="end">OK</IonButton>
+        </IonItem>
+        <IonItem>
+            <IonLabel position={"floating"}>Tên chức năng</IonLabel>
+            <IonInput onIonChange={(e)=>{
+                if(e){
+                    setName(e!.detail?.value);
+                }
+                
+            }} value={name}></IonInput>
+        </IonItem>
+        <IonItem>
+            <IonLabel position={"floating"}>Đường dẫn chức năng</IonLabel>
+            <IonInput onIonChange={(e)=>{
+                setUrl(e.detail.value);
+            }} value={url}></IonInput>
+        </IonItem>
+        <IconContext.Provider value={{ color: "blue", className: "global-class-name" }}>
+        <IonAccordionGroup ref={accordionGroup}>
+        <IonAccordion value="first">
+            <IonItem slot="header" color="light">
+            <IonLabel><DynamicFaIcon name={icon!}/>Icon</IonLabel>
+            </IonItem>
+            <div className="ion-padding" slot="content">
+            <IonGrid>
+                <IonRow>
+                    {selectItems.map(el => (<IonCol onClick={()=>{selectIcon(el.value)}} key={el.value}><DynamicFaIcon name={el.value}/></IonCol>))}
+                </IonRow>
+            </IonGrid>
+            </div>
+        </IonAccordion>
+        </IonAccordionGroup>
+        </IconContext.Provider>
+    </IonContent>
+    );
+}
+interface DynamicFaIconProp{
+    name?: string;
+}
+export const DynamicFaIcon:React.FC<DynamicFaIconProp> = ({ name }) => {
+
+    let icons = FaIcons as any;
+    let icon = icons[name!];
+    const IconComponent = icon;
+  
+    if (!IconComponent) { // Return a default one
+      return <FaIcons.FaInfo />;
+    }
+  
+    return <IconComponent/>;
+  };
+interface AppUIFeatureListProp{
+    appId: string;
+}
+export const AppUIFeatureList: React.FC<AppUIFeatureListProp> = ({appId})=>{
+    const [definedFeatures, setDefinedFeatures] = useState<Array<DefinedFeatureEntity>>([])
+    useEffect(()=>{
+        const loadDataFunction = async(appId: string)=>{
+            try {
+                let result: any = await (await loadDefinedAppFeatures(appId)).json();
+                console.log(result)
+                setDefinedFeatures(result.definedAppFeatures);
+            } catch (error) {
+                console.log(error)
+            }
+        }
+        loadDataFunction(appId);
+    },[]);
+    const [item,setItem] = useState<AppFeatures|null>(null);
+    const [uAction, setUAtion] = useState<string>('cancel');
+    async function removeFeature(id: string){
+        console.log(`Delete feature ${id}`);
+        let apiRst = await apiRemoveAppFeature(id); 
+        if([200,204].indexOf(apiRst.status) !==-1){
+            //doan xu ly giao dien
+            let idx = definedFeatures.findIndex(el=> el.id === id);
+            definedFeatures.splice(idx,1);
+            setDefinedFeatures([...definedFeatures]);
+        }
+    }
+    
+    function actionWithFeature(e: CustomEvent,el: any, action: string){
+        setItem(el);
+        setUAtion(action);
+        present({
+            event: e,
+            onDidDismiss: (e: CustomEvent) => {
+                takeActionApiFeature(e);
+            },
+        }); 
+    }
+    async function takeActionApiFeature(e:CustomEvent){
+
+        console.log(e.detail.role);
+        console.log(e.detail.data);
+        switch(e.detail.role){
+            case 'edit':
+                try{
+                    let itemChange = {
+                        id: e.detail.data.id,
+                        name: e.detail.data.name,
+                        code: e.detail.data.code,
+                        content: {
+                            title: e.detail.data.name,
+                            url: e.detail.data.url,
+                            iosIcon: e.detail.data.icon,
+                            mdIcon: e.detail.data.icon
+                        }
+                    };
+                    let apiRst = await apiUpdateAppFeature(itemChange);
+                    if([200,204].indexOf(apiRst.status) !== -1){
+                        console.log('cap nhat thanh cong!');
+                        let idx = definedFeatures.findIndex(el => {return el.id === itemChange.id});
+                        if(idx !== -1){
+                            let news = [...definedFeatures];
+                            news.splice(idx,1);
+                            news.splice(idx,0, itemChange);
+                            setDefinedFeatures(news);
+                            console.log(news);
+                        }
+                        
+                    }else{
+                        console.log('cap nhat that bai');
+                    }
+                }catch(error){
+                    console.log('loi cuc bo', error);
+                }
+                
+            break;
+            case "create":
+
+            break;
+            case 'cancel':
+                alert('Huy khong lam nua');
+            break;
+        }
+    }
+    const [present, dismiss] = useIonPopover(<AppFeaturePopover 
+        onDismis={(data:any,role: string)=>{
+            dismiss(data,role);
+        }}
+        action = {uAction} 
+        item={item}/>, {
+        onDismiss: (data: any, role: string) => dismiss(data, role),
+    });
+    return (<div>
+        <IconContext.Provider value={{ color: "blue", className: "global-class-name" }}>
+        <IonList>
+            {definedFeatures.map(el=>(
+            <IonItem key={el.id}>
+                <FaTrash title="Xóa" onClick={()=>{removeFeature(el.id)}} color="red" />
+                <IonLabel>{el.name} - {el.content.title} - {el.content.url} <DynamicFaIcon name={el.content.mdIcon}/></IonLabel>
+                <FaEdit onClick={(e:any)=>actionWithFeature(e,el, "edit")} title="Sửa" color='blue'/>
+            </IonItem>))}
+        </IonList>
+        </IconContext.Provider>
+    </div>);
+}

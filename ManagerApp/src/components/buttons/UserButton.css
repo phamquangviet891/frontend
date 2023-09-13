@@ -1,0 +1,9 @@
+.user-button{
+    margin: 5px;
+    width: 48px;
+    height: 48px;
+    position: relative;
+}
+.overflow-allow::part(native) {
+    overflow: visible;
+}
